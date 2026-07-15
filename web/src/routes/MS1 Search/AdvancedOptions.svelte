@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Accordion, AccordionItem } from "@skeletonlabs/skeleton";
   import ModificationSelector from "./ModificationSelector.svelte";
+  import DimerOptions from "./DimerOptions.svelte";
   import Tooltip from "../Tooltip.svelte";
   export let enabledModifications: Array<string>;
   export let allowedModifications: Array<string> | undefined;
@@ -8,6 +9,20 @@
   export let cleanupWindow: number;
   export let consolidationPpm: number;
   export let advancedMode: boolean;
+  export let enableDimers: boolean;
+  export let species: string | undefined;
+  export let permissiveMode: boolean;
+  export let speciesIndex: SpeciesIndex | undefined;
+  export let customDonorPattern: string;
+  export let customAcceptorPattern: string;
+  export let customLosesTerminalAla: boolean;
+  export let customAcceptorBridgeType: "none" | "glycine" | "dasp";
+  export let customMinGlycineBridge: number;
+  export let customMaxGlycineBridge: number;
+  export let donorAbundanceThreshold: number;
+  export let previewResult: CustomRulePreviewResult | undefined;
+  export let previewLoading: boolean;
+  export let requestPreview: () => void;
 </script>
 
 <Accordion class="w-full">
@@ -71,6 +86,23 @@
           </div>
         </div>
       </div>
+
+      <DimerOptions
+        bind:enableDimers
+        bind:species
+        bind:permissiveMode
+        bind:customDonorPattern
+        bind:customAcceptorPattern
+        bind:customLosesTerminalAla
+        bind:customAcceptorBridgeType
+        bind:customMinGlycineBridge
+        bind:customMaxGlycineBridge
+        bind:donorAbundanceThreshold
+        {speciesIndex}
+        {previewResult}
+        {previewLoading}
+        {requestPreview}
+      />
     </svelte:fragment>
   </AccordionItem>
 </Accordion>

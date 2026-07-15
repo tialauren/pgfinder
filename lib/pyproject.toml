@@ -35,13 +35,21 @@ Documentation = "https://pgfinder.readthedocs.io/en/latest/"
 
 
 [project.optional-dependencies]
+ms2 = [
+  "pyteomics>=4.7",
+  "lxml",
+  "psims"
+]
 tests = [
   "py",
   "pytest>=7.0",
   "pytest-cov",
   "pytest-mpl",
   "pytest-regtest",
-  "pytest-xdist"
+  "pytest-xdist",
+  "pyteomics>=4.7",
+  "lxml",
+  "psims"
 ]
 docs = [
   "sphinx",

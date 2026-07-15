@@ -26,3 +26,11 @@ output_dir: output
 warnings: ignore
 quiet: false
 float_format: 4
+
+# Dimer matching options
+enable_dimers: false
+species: null
+permissive_mode: false
+# Percentage (0-100) of the structurally eligible donor pool's cumulative
+# intensity to cover when selecting donors for dimer building.
+donor_abundance_threshold: 90

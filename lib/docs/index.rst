@@ -9,6 +9,7 @@ Welcome to pgfinder's documentation!
     installation
     usage
     pglang
+    dimers
     data_dictionary
     contributing
     smithereens

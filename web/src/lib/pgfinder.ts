@@ -23,11 +23,13 @@ let pyodide: PyodideInterface;
   pyodide.registerJsModule("pyio", state);
   await pyodide.loadPackage(["micropip", "sqlite3"]);
   const micropip = pyodide.pyimport("micropip");
-  await micropip.install("pgfinder==1.4.0");
+  // await micropip.install("pgfinder==1.4.0");
   // If you need to test development version of pgfinder you should build the wheel and copy the resulting .whl to the
   // lib/ directory (adajacent to this file), replace the version below and comment out the above (which loads from
   // PyPI).
-  // await micropip.install("./pgfinder-1.3.3.dev4+g97e51ef-py3-none-any.whl");
+  await micropip.install(
+    "./pgfinder-1.4.1.dev29+ged49dcc4a.d20260713-py3-none-any.whl",
+  );
   await pyodide.runPythonAsync(
     "import pgfinder; from pgfinder.gui.shim import *",
   );
@@ -42,11 +44,16 @@ let pyodide: PyodideInterface;
   const jsonMass = await pyodide.runPythonAsync("mass_library_index()");
   const massLibraries = JSON.parse(jsonMass);
 
+  // Load the species supported by dimer matching
+  const jsonSpecies = await pyodide.runPythonAsync("species_index()");
+  const speciesIndex = JSON.parse(jsonSpecies);
+
   const msg: PGFReadyMsg = {
     type: "Ready",
     version,
     allowedModifications,
     massLibraries,
+    speciesIndex,
   };
   postMessage(msg);
 })();
@@ -116,6 +123,28 @@ function postResult(proxy: PyProxy) {
   }
 }
 
+function postTheoreticalDimers(proxy: PyProxy) {
+  const csvFiles: Map<string, Map<string, string>> = proxy.toJs();
+  proxy.destroy();
+
+  const suffixes: { [key: string]: string } = {
+    dimers: "_theoretical_dimers.csv",
+    donors: "_donors_used.csv",
+  };
+
+  for (const [name, outputs] of csvFiles) {
+    const basename = name.split(".").slice(0, -1).join(".") || name;
+
+    for (const [key, content] of outputs) {
+      const filename = `${basename}${suffixes[key]}`;
+      const blob = new Blob([content], { type: "text/csv" });
+
+      const msg: PGFResultMsg = { type: "Result", filename, blob };
+      postMessage(msg);
+    }
+  }
+}
+
 function postError(error: PythonError) {
   const message = error.message;
 
@@ -126,7 +155,36 @@ function postError(error: PythonError) {
   postMessage(msg);
 }
 
+function postPreview(jsonResult: string) {
+  const result: CustomRulePreviewResult = JSON.parse(jsonResult);
+  const msg: PGFPreviewMsg = {
+    type: "Preview",
+    ...result,
+  };
+  postMessage(msg);
+}
+
 onmessage = async ({ data }) => {
+  if (data?.kind === "PreviewCustomRule") {
+    const { state: previewState } = data as PGFPreviewReq;
+    Object.assign(state, previewState);
+    pyodide
+      .runPythonAsync("preview_custom_rule()")
+      .then(postPreview)
+      .catch(postError);
+    return;
+  }
+
+  if (data?.kind === "GenerateTheoreticalDimers") {
+    const { state: dimersState } = data as PGFGenerateTheoreticalDimersReq;
+    Object.assign(state, dimersState);
+    pyodide
+      .runPythonAsync("generate_theoretical_dimers()")
+      .then(postTheoreticalDimers)
+      .catch(postError);
+    return;
+  }
+
   Object.assign(state, data);
   pyodide.runPythonAsync("run_analysis()").then(postResult).catch(postError);
 };

@@ -60,6 +60,11 @@ extensions = [
     "sphinxcontrib.jquery",
 ]
 
+# Auto-generate slug anchors for Markdown headings (e.g. "## Residues" -> "#residues"),
+# so `file.md#heading-id` cross-references resolve. Depth 6 covers the most deeply
+# nested headings in usage.md.
+myst_heading_anchors = 6
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 

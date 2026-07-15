@@ -3,6 +3,7 @@
 import logging
 import re
 from decimal import Decimal
+from typing import Tuple
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
@@ -13,7 +14,7 @@ from pgfinder.logs.logs import LOGGER_NAME
 
 LOGGER = logging.getLogger(LOGGER_NAME)
 
-# Only need pgfinder columns so subset those here to simplify subsequent indexing
+
 COLUMNS = COLUMNS["pgfinder"]
 
 
@@ -600,3 +601,205 @@ def consolidate_results(
     consolidated_df.rename(columns=columns["consolidation"], inplace=True)
 
     return pd.concat([df, consolidated_df], axis=1)
+
+
+def _build_monomer_search_frame(
+    raw_data_df: pd.DataFrame,
+    theo_masses_df: pd.DataFrame,
+    enabled_mod_list: list,
+    ppm_tolerance: int,
+) -> pd.DataFrame:
+    """Build the monomer (+ multimer/modification variant) search frame used as
+    the basis for both plain monomer matching and dimer donor detection."""
+    LOGGER.info("Running monomer analysis...")
+    LOGGER.info("Filtering theoretical masses by observed masses")
+    obs_monomers_df = filtered_theo(ftrs_df=raw_data_df, theo_df=theo_masses_df, user_ppm=ppm_tolerance)
+    enabled_mod_list = enabled_mod_list or []
+
+    multimer_mods = [m for m in enabled_mod_list if "Multimers" in m]
+    other_mods = [m for m in enabled_mod_list if m not in multimer_mods]
+
+    def build_multimers(mod):
+        LOGGER.info("Building multimers from obs muropeptides")
+        theo_multimers_df = multimer_builder(obs_monomers_df, mod)
+        LOGGER.info("Filtering theoretical multimers by observed")
+        return filtered_theo(raw_data_df, theo_multimers_df, ppm_tolerance)
+
+    obs_theo_df = pd.concat([obs_monomers_df, *(build_multimers(type) for type in multimer_mods)])
+
+    def apply_modification(mod):
+        LOGGER.info(f"Generating {mod} variants")
+        return modification_generator(obs_theo_df, mod)
+
+    LOGGER.info("Building custom search file")
+    master_frame = pd.concat([obs_theo_df, *(apply_modification(mod) for mod in other_mods)])
+    return master_frame.astype({"Theo (Da)": float})
+
+
+def _detect_matched_monomers(raw_data_df: pd.DataFrame, master_frame: pd.DataFrame, ppm_tolerance: int) -> pd.DataFrame:
+    """Match a monomer search frame against raw_data_df and keep only the rows
+    that were actually matched to an observed mass - candidate donors."""
+    temp_matched = matching(raw_data_df, master_frame, ppm_tolerance)
+    temp_matched = calculate_ppm_delta(df=temp_matched)
+    return temp_matched[temp_matched[COLUMNS["inferred"]["structure"]].notna()].copy()
+
+
+def _build_theoretical_dimers(
+    matched_monomers: pd.DataFrame,
+    theo_masses_df: pd.DataFrame,
+    species_code: str = None,
+    strict_mode: bool = True,
+    custom_rule=None,
+    donor_abundance_threshold: float = 0.9,
+) -> tuple:
+    from pgfinder.accurate_dimer_builder import build_dimers_for_species
+
+    if matched_monomers.empty:
+        empty = pd.DataFrame(columns=[COLUMNS["inferred"]["structure"], COLUMNS["inferred"]["mass"]])
+        return empty, empty
+
+    LOGGER.info(f"Running dimer analysis for {species_code or custom_rule.label}...")
+    return build_dimers_for_species(
+        matched_monomers_df=matched_monomers,
+        theoretical_database_df=theo_masses_df,
+        species_code=species_code,
+        columns=COLUMNS,
+        strict_mode=strict_mode,
+        custom_rule=custom_rule,
+        donor_abundance_threshold=donor_abundance_threshold,
+    )
+
+
+def generate_theoretical_dimers(
+    raw_data_df: pd.DataFrame,
+    theo_masses_df: pd.DataFrame,
+    enabled_mod_list: list,
+    ppm_tolerance: int,
+    species_code: str = None,
+    strict_mode: bool = True,
+    custom_rule=None,
+    donor_abundance_threshold: float = 0.9,
+) -> tuple:
+    """
+    Detect monomers in raw_data_df, select donors covering
+    `donor_abundance_threshold` of the eligible donor pool's cumulative
+    abundance, and build the theoretical dimer list against theo_masses_df as
+    acceptors - without matching the resulting dimers back against raw_data_df.
+
+    This lets a user see exactly which theoretical dimers a full
+    `data_analysis_with_dimers` run would search for, and which donors were
+    used to build them, without running the (potentially slower) final
+    match-and-consolidate steps.
+
+    Returns
+    -------
+    tuple
+        (theoretical_dimers_df, donors_used_df) - both empty (with the
+        expected structure/mass columns) if no monomers are detected, or none
+        qualify as a donor.
+    """
+    if species_code is None and custom_rule is None:
+        raise ValueError("species_code or custom_rule is required to generate theoretical dimers")
+
+    master_frame = _build_monomer_search_frame(raw_data_df, theo_masses_df, enabled_mod_list, ppm_tolerance)
+    matched_monomers = _detect_matched_monomers(raw_data_df, master_frame, ppm_tolerance)
+    return _build_theoretical_dimers(
+        matched_monomers,
+        theo_masses_df,
+        species_code=species_code,
+        strict_mode=strict_mode,
+        custom_rule=custom_rule,
+        donor_abundance_threshold=donor_abundance_threshold,
+    )
+
+
+def data_analysis_with_dimers(
+    raw_data_df: pd.DataFrame,
+    theo_masses_df: pd.DataFrame,
+    rt_window: float,
+    enabled_mod_list: list,
+    ppm_tolerance: int,
+    consolidation_ppm: float,
+    enable_dimers: bool = False,
+    species_code: str = None,
+    strict_mode: bool = True,
+    custom_rule=None,
+    donor_abundance_threshold: float = 0.9,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Enhanced data_analysis that optionally includes dimer matching.
+
+    Strategy: Run standard monomer workflow, then add dimers and run
+    consolidation on the combined dataset.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        (final results DataFrame, donors used to build dimers — empty when
+        enable_dimers is False or no valid donors were found)
+    """
+    sugar = Decimal("203.0793")
+    sodium = Decimal("21.9819")
+    potassium = Decimal("37.9559")
+
+    # Step 1: Match monomers (same as data_analysis)
+    master_frame = _build_monomer_search_frame(raw_data_df, theo_masses_df, enabled_mod_list, ppm_tolerance)
+
+    # Step 2: Add dimers to search space if requested
+    donors_used_df = pd.DataFrame()
+    if enable_dimers and (species_code is not None or custom_rule is not None):
+        matched_monomers = _detect_matched_monomers(raw_data_df, master_frame, ppm_tolerance)
+        theoretical_dimers_df, donors_used_df = _build_theoretical_dimers(
+            matched_monomers,
+            theo_masses_df,
+            species_code=species_code,
+            strict_mode=strict_mode,
+            custom_rule=custom_rule,
+            donor_abundance_threshold=donor_abundance_threshold,
+        )
+
+        if not theoretical_dimers_df.empty:
+            LOGGER.info(f"Adding {len(theoretical_dimers_df)} theoretical dimers to search space")
+            # Add dimers to the master search frame
+            master_frame = pd.concat([master_frame, theoretical_dimers_df], ignore_index=True)
+
+    # Step 3: Match everything (monomers + dimers)
+    LOGGER.info("Matching")
+    matched_data_df = matching(raw_data_df, master_frame, ppm_tolerance)
+    LOGGER.info("Cleaning data")
+
+    matched_data_df = calculate_ppm_delta(df=matched_data_df)
+
+    # Step 4: Clean up (removes adducts)
+    cleaned_df = clean_up(ftrs_df=matched_data_df, mass_to_clean=sodium, time_delta=rt_window)
+    cleaned_df = clean_up(ftrs_df=cleaned_df, mass_to_clean=potassium, time_delta=rt_window)
+    cleaned_data_df = clean_up(ftrs_df=cleaned_df, mass_to_clean=sugar, time_delta=rt_window)
+
+    cleaned_data_df.sort_values(by=["Intensity", "RT (min)"], ascending=[False, True], inplace=True, kind="stable")
+    cleaned_data_df.reset_index(drop=True, inplace=True)
+
+    # Step 5: Consolidation (same for monomers and dimers)
+    most_likely_df = pick_most_likely_structures(cleaned_data_df, consolidation_ppm)
+    final_df = consolidate_results(most_likely_df)
+
+    if enable_dimers:
+        # Count monomers/dimers for logging BEFORE setting attrs — pandas
+        # deepcopies attrs on every slice, which fails in Pyodide when attrs
+        # contain JsProxy objects (e.g. enabledModifications from pyio).
+        structure_col = COLUMNS["inferred"]["structure"]
+        n_monomers = final_df[structure_col].str.contains(r"\|1$", na=False, regex=True).sum()
+        n_dimers = final_df[structure_col].str.contains(r"\|2$", na=False, regex=True).sum()
+        LOGGER.info(f"Monomers found: {n_monomers}")
+        LOGGER.info(f"Dimers found: {n_dimers}")
+
+    # Set metadata attrs last — after all pandas operations — so that any
+    # non-deepcopy-safe values (e.g. Pyodide JsProxy objects) never appear
+    # in attrs while slicing is still happening.
+    final_df.attrs["file"] = raw_data_df.attrs["file"]
+    final_df.attrs["masses_file"] = theo_masses_df.attrs["file"]
+    final_df.attrs["rt_window"] = rt_window
+    final_df.attrs["modifications"] = enabled_mod_list
+    final_df.attrs["ppm"] = ppm_tolerance
+    final_df.attrs["consolidation_ppm"] = consolidation_ppm
+
+    return final_df, donors_used_df

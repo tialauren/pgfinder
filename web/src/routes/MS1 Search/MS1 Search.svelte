@@ -8,7 +8,7 @@
   import MassDatabaseUploader from "./MassDatabaseUploader.svelte";
   import MsDataUploader from "./MsDataUploader.svelte";
   import ErrorModal from "../ErrorModal.svelte";
-  import { defaultPythonState } from "$lib/constants";
+  import { CUSTOM_SPECIES_VALUE, defaultPythonState } from "$lib/constants";
   import PGFinder from "$lib/pgfinder.ts?worker";
   import fileDownload from "js-file-download";
   import { onMount } from "svelte";
@@ -22,9 +22,12 @@
   let state: PythonState = { ...defaultPythonState };
   let allowedModifications: Array<string>;
   let massLibraries: MassLibraryIndex;
+  let speciesIndex: SpeciesIndex;
   let loading = true;
   let processing = false;
   let advancedMode = false;
+  let previewResult: CustomRulePreviewResult | undefined;
+  let previewLoading = false;
 
   // Start PGFinder and attach callbacks
   let pgfinder: Worker;
@@ -36,6 +39,7 @@
           version = msg.version;
           allowedModifications = msg.allowedModifications;
           massLibraries = msg.massLibraries;
+          speciesIndex = msg.speciesIndex;
           loading = false;
           break;
         case "Result":
@@ -54,8 +58,13 @@
           };
           modalStore.trigger(modal);
           processing = false;
+          previewLoading = false;
           break;
         }
+        case "Preview":
+          previewResult = msg;
+          previewLoading = false;
+          break;
       }
     };
   });
@@ -66,12 +75,54 @@
     processing = true;
   }
 
+  // Ask PGFinder to show example structures matched by the custom donor/acceptor patterns
+  function requestPreview() {
+    const req: PGFPreviewReq = { kind: "PreviewCustomRule", state };
+    pgfinder.postMessage(req);
+    previewLoading = true;
+  }
+
+  // Ask PGFinder to generate (and download) just the theoretical dimer list,
+  // without matching it against the raw MS1 data
+  function generateTheoreticalDimers() {
+    const req: PGFGenerateTheoreticalDimersReq = {
+      kind: "GenerateTheoreticalDimers",
+      state,
+    };
+    pgfinder.postMessage(req);
+    processing = true;
+  }
+
+  // A previously-confirmed preview is invalidated as soon as the patterns or
+  // bridge constraints change, so a stale "this is fine" can't carry over.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- args exist only so `$:` below tracks them as dependencies
+  function invalidateCustomRulePreview(...dependencies: unknown[]) {
+    previewResult = undefined;
+  }
+  $: invalidateCustomRulePreview(
+    state.customDonorPattern,
+    state.customAcceptorPattern,
+    state.customAcceptorBridgeType,
+    state.customMinGlycineBridge,
+    state.customMaxGlycineBridge,
+  );
+
+  $: customRuleReady =
+    !state.enableDimers ||
+    state.species !== CUSTOM_SPECIES_VALUE ||
+    (previewResult !== undefined && !previewResult.error);
+
   // Reactively compute if PGFinder is ready
   $: ready =
     !loading &&
     !processing &&
     state.msData !== undefined &&
-    state.massLibrary !== undefined;
+    state.massLibrary !== undefined &&
+    (!state.enableDimers || state.species !== undefined) &&
+    customRuleReady;
+
+  // Theoretical dimers can only be generated once dimer matching is actually configured
+  $: theoreticalDimersReady = ready && state.enableDimers;
 
   // Reactively adapt the UI when entering advanced mode
   $: uiWidth = advancedMode ? "md:w-[40rem]" : "";
@@ -99,8 +150,22 @@
         bind:ppmTolerance={state.ppmTolerance}
         bind:cleanupWindow={state.cleanupWindow}
         bind:consolidationPpm={state.consolidationPpm}
+        bind:enableDimers={state.enableDimers}
+        bind:species={state.species}
+        bind:permissiveMode={state.permissiveMode}
+        bind:customDonorPattern={state.customDonorPattern}
+        bind:customAcceptorPattern={state.customAcceptorPattern}
+        bind:customLosesTerminalAla={state.customLosesTerminalAla}
+        bind:customAcceptorBridgeType={state.customAcceptorBridgeType}
+        bind:customMinGlycineBridge={state.customMinGlycineBridge}
+        bind:customMaxGlycineBridge={state.customMaxGlycineBridge}
+        bind:donorAbundanceThreshold={state.donorAbundanceThreshold}
         bind:advancedMode
         {allowedModifications}
+        {speciesIndex}
+        {previewResult}
+        {previewLoading}
+        {requestPreview}
       />
 
       <button
@@ -111,6 +176,17 @@
       >
         Run Analysis
       </button>
+
+      {#if state.enableDimers}
+        <button
+          type="button"
+          class="btn variant-ghost"
+          on:click={generateTheoreticalDimers}
+          disabled={!theoreticalDimersReady}
+        >
+          Generate Theoretical Dimers
+        </button>
+      {/if}
 
       {#if processing}
         <ProgressBar />

@@ -16,6 +16,24 @@ declare type PythonState = {
   ppmTolerance: number;
   cleanupWindow: number;
   consolidationPpm: number;
+  enableDimers: boolean;
+  species: string | undefined;
+  permissiveMode: boolean;
+  customDonorPattern: string;
+  customAcceptorPattern: string;
+  customLosesTerminalAla: boolean;
+  customAcceptorBridgeType: "none" | "glycine" | "dasp";
+  customMinGlycineBridge: number;
+  customMaxGlycineBridge: number;
+  donorAbundanceThreshold: number;
+};
+
+declare type CustomRulePreviewResult = {
+  donorMatches: Array<string>;
+  donorCount: number;
+  acceptorMatches: Array<string>;
+  acceptorCount: number;
+  error: string | undefined;
 };
 
 declare type MassLibraryIndex = {
@@ -27,6 +45,10 @@ declare type MassLibraryIndex = {
   };
 };
 
+declare type SpeciesIndex = {
+  [code: string]: string;
+};
+
 declare type StructuresIndex = {
   [species: string]: {
     file: string;
@@ -36,13 +58,18 @@ declare type StructuresIndex = {
 
 // PGFinder Worker Message Types ===============================================
 
-declare type PGFinderMsg = PGFReadyMsg | PGFResultMsg | PGFErrorMsg;
+declare type PGFinderMsg =
+  | PGFReadyMsg
+  | PGFResultMsg
+  | PGFErrorMsg
+  | PGFPreviewMsg;
 
 declare type PGFReadyMsg = {
   type: "Ready";
   version: string;
   allowedModifications: Array<string>;
   massLibraries: MassLibraryIndex;
+  speciesIndex: SpeciesIndex;
 };
 
 declare type PGFResultMsg = {
@@ -54,6 +81,20 @@ declare type PGFResultMsg = {
 declare type PGFErrorMsg = {
   type: "Error";
   message: string;
+};
+
+declare type PGFPreviewMsg = {
+  type: "Preview";
+} & CustomRulePreviewResult;
+
+declare type PGFPreviewReq = {
+  kind: "PreviewCustomRule";
+  state: PythonState;
+};
+
+declare type PGFGenerateTheoreticalDimersReq = {
+  kind: "GenerateTheoreticalDimers";
+  state: PythonState;
 };
 
 // Smithereens Worker Message Types ============================================

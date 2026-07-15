@@ -112,6 +112,50 @@ During consolidation, structures with the lowest absolute ppm are selected over 
 However, if two or more matches have a theoretical mass less than the consolidation ppm apart, then all of those matches are retained.
 This parameter defines the minimal difference in absolute ppm below which no consolidation is made.
 
+##### Dimer Matching
+
+In addition to monomers, PGFinder can search for crosslinked **dimers** which is two muropeptide stems joined by a
+transpeptidase-mediated bond. See the [Dimers](dimers.md) page for the underlying chemistry rules; this
+section just covers the controls.
+
+Toggle **Enable Dimer Matching** on, then choose a **Species** from the list. Each built-in species encodes
+the donor/acceptor rules and crosslink chemistry known from the literature for that organism. A
+**Permissive Mode** toggle is also available for species with a peptide bridge (e.g. _S. aureus_) . The strict
+mode enforces the literature standard bridge length, permissive mode allows variant bridge lengths for
+novel crosslink discovery.
+
+**Donor Abundance Threshold (%)** controls how many structurally eligible donor monomers are used per
+crosslink type . The donors are taken from most to least abundant until their combined intensity covers this
+percentage of the eligible pool's total intensity (default 90%). See [How donors and acceptors are
+chosen](dimers.md#how-donors-and-acceptors-are-chosen) for the full algorithm. This control applies to both
+built-in species and custom rules.
+
+If your species isn't in the list, select **Custom...** instead. This reveals:
+
+- **Donor Pattern** / **Acceptor Pattern** — regular expressions defining your own donor/acceptor rule (see
+  [Custom crosslink rules](dimers.md#custom-crosslink-rules) for the pattern syntax).
+- **Acceptor Bridge** — if your species crosslinks through a peptide bridge (glycine or D-Asp), choose the
+  bridge type and, for glycine, the allowed bridge-length range.
+- **Donor loses terminal D-Ala** — whether the donor loses a terminal D-Ala residue during crosslink
+  formation.
+- **Preview Matches** — shows which structures in your loaded mass database match your patterns before you
+  commit to a full run. **Run Analysis** stays disabled until a preview succeeds with your current
+  patterns, since a regex mistake would otherwise silently produce wrong dimer masses with no warning.
+
+Custom rules are currently only available from the WebUI, not the command line.
+
+Click **Generate Theoretical Dimers** to download the theoretical dimer list (donor/acceptor
+combinations and masses) that **Run Analysis** would search for, without waiting for the 
+final match-against-raw-data and consolidation steps. This is useful for sanity checking what a run will
+search for before committing to it. It still requires an uploaded MS1 file, since donors are chosen from
+the *detected* monomers that qualify — see [How donors and acceptors are
+chosen](dimers.md#how-donors-and-acceptors-are-chosen). Two files are downloaded: the theoretical dimer
+list (`*_theoretical_dimers.csv`) and the donors that were actually selected (`*_donors_used.csv`).
+
+**Run Analysis** (when dimer matching is enabled) also downloads a `*_donors_used.csv` alongside the main
+results file, so you always have a record of which donor monomers fed into the search regardless of whether
+you ran **Generate Theoretical Dimers** first.
+
 
 In the screenshot below, we have...
 
@@ -196,3 +240,30 @@ find_pg -c pgfinder/default_config.yaml
 
 Each option in the configuration file can be overridden at the command line, see `find_pg --help` for more
 information.
+
+### Dimer Matching
+
+To also search for crosslinked dimers (see [Dimers](dimers.md)), pass `--enable_dimers` along with
+`--species` (one of `ecoli`, `saureus`, `efaecalis`, `bsubtilis`, `cdiff`, `fusobacterium`):
+
+``` bash
+find_pg --input_file sample.ftrs --masses_file e_coli_monomers_simple.csv \
+        --enable_dimers --species ecoli
+```
+
+Add `--permissive_mode` to relax bridge-length matching for species with a peptide bridge (e.g. _S.
+aureus_). Custom regex crosslink rules (for species not in the built-in list) are currently only available
+from the WebUI, not the command line.
+
+Use `--donor_abundance_threshold` (a percentage, 0-100, default 90 — see
+`donor_abundance_threshold` in `default_config.yaml`) to control how many structurally-eligible donor
+monomers are used per crosslink type: donors are taken from most to least abundant until their combined
+intensity covers this percentage of the eligible pool's total intensity. See [How donors and acceptors are
+chosen](dimers.md#how-donors-and-acceptors-are-chosen) for the full algorithm.
+
+Alongside the combined results file, `--enable_dimers` always writes two separate files:
+`{input_basename}_theoretical_dimers.csv`, containing just the theoretical dimer list (the same one
+the WebUI's **Generate Theoretical Dimers** button downloads), and `{input_basename}_donors_used.csv`,
+listing exactly which donor monomers were selected, their intensities, and their share of the eligible
+donor pool — useful for inspecting the dimer search space independently of which structures were actually
+matched in your sample.
