@@ -21,7 +21,7 @@ page documents the chemistry rules and how to define your own for a species that
   database that qualifies as an acceptor is used, since an acceptor doesn't need to have been detected
   itself.
 
-Which donors were actually selected — their structures, intensities, and their share of the eligible
+Which donors were actually selected, their structures, intensities, and their share of the eligible
 pool's cumulative intensity  is recorded in a `donors_used` output (`*_donors_used.csv`). This file is
 produced automatically by the CLI alongside results, by the WebUI's **Generate Theoretical Dimers** preview,
 and by **Run Analysis** when dimer matching is enabled.
