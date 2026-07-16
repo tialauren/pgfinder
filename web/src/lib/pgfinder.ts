@@ -28,7 +28,7 @@ let pyodide: PyodideInterface;
   // lib/ directory (adajacent to this file), replace the version below and comment out the above (which loads from
   // PyPI).
   await micropip.install(
-    "./pgfinder-1.4.1.dev29+ged49dcc4a.d20260713-py3-none-any.whl",
+    new URL("/pgfinder-1.4.1.dev29-py3-none-any.whl", self.location.origin).href,
   );
   await pyodide.runPythonAsync(
     "import pgfinder; from pgfinder.gui.shim import *",

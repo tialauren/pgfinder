@@ -199,14 +199,14 @@ class TestEFaecalis:
         assert "3-3" in types, "3-3 crosslinks missing from E. faecalis output"
 
     def test_no_direct_4_3_crosslinks(self, results):
-        """E. faecalis crosslinks only through a D-Asp bridge — direct 4-3 must not appear."""
+        """E. faecalis crosslinks only through the Ala₂ bridge — direct 4-3 must not appear."""
         dimers, _ = results
         assert "4-3" not in _crosslink_types_in(dimers), (
             "Bare 4-3 crosslink appeared in E. faecalis output — only 4-3-bridge is valid"
         )
 
-    def test_4_3_bridge_donor_is_ungrafted_pentapeptide(self, results):
-        """4-3-bridge donor must not carry the D-Asp bridge itself."""
+    def test_4_3_bridge_donor_carries_ala2_bridge(self, results):
+        """4-3-bridge donor must carry the di-L-Ala (Ala₂) bridge [AA]."""
         _, donors = results
         bridge_donors = donors[donors["Crosslink Type"] == "4-3 bridge crosslink"]
         assert not bridge_donors.empty, "No 4-3-bridge donor found"
@@ -215,18 +215,17 @@ class TestEFaecalis:
             assert info is not None
             assert info.length == 5, f"4-3-bridge donor must be pentapeptide: {structure}"
             assert info.has_lys_pos3, f"4-3-bridge donor must have Lys at pos3: {structure}"
-            assert not info.has_dasp_bridge, (
-                f"4-3-bridge donor must NOT carry the D-Asp bridge "
-                f"(it forms on the acceptor side): {structure}"
+            assert info.has_ala2_bridge, (
+                f"4-3-bridge donor must carry the [AA] (di-L-Ala) bridge: {structure}"
             )
             assert info.sequence[3] == "A", f"D-Ala at pos4 required: {structure}"
             assert info.sequence[4] == "A", f"D-Ala at pos5 required: {structure}"
 
-    def test_4_3_bridge_acceptors_carry_d_asp(self, results):
-        """Every 4-3-bridge dimer must reference an acceptor that has the D-Asp bridge.
+    def test_4_3_bridge_acceptors_carry_ala2_bridge(self, results):
+        """Every 4-3-bridge dimer must reference an acceptor that has the [AA] (Ala₂) bridge.
 
         Dimer format: donor=acceptor[crosslink_type]|2
-        e.g. gm-AQKA=gm-AQK[D][4-3-bridge]|2
+        e.g. gm-AQK[AA]A=gm-AQK[AA][4-3-bridge]|2
         Strip the trailing [crosslink_type]|2 to isolate the acceptor.
         """
         import re
@@ -236,11 +235,11 @@ class TestEFaecalis:
         assert not bridge_dimers.empty
         for _, row in bridge_dimers.iterrows():
             structure = row["Inferred structure"]
-            right = structure.split("=")[1]           # gm-AQK[D][4-3-bridge]|2
-            right = right.rsplit("|", 1)[0]           # gm-AQK[D][4-3-bridge]
-            acceptor_part = re.sub(r"\[[^\]]+\]$", "", right)  # gm-AQK[D]
-            assert "[D]" in acceptor_part, (
-                f"4-3-bridge acceptor must carry [D] (D-Asp bridge): {structure}"
+            right = structure.split("=")[1]           # gm-AQK[AA][4-3-bridge]|2
+            right = right.rsplit("|", 1)[0]           # gm-AQK[AA][4-3-bridge]
+            acceptor_part = re.sub(r"\[[^\]]+\]$", "", right)  # gm-AQK[AA]
+            assert "[AA]" in acceptor_part, (
+                f"4-3-bridge acceptor must carry [AA] (di-L-Ala bridge): {structure}"
             )
 
     def test_3_3_donor_has_lys_pos3_and_d_ala_pos4(self, results):
@@ -253,7 +252,6 @@ class TestEFaecalis:
             assert info.length == 4, f"3-3 donor must be tetrapeptide: {structure}"
             assert info.has_lys_pos3, f"3-3 donor must have Lys at pos3: {structure}"
             assert info.sequence[3] == "A", f"3-3 donor must have D-Ala at pos4: {structure}"
-            assert not info.has_dasp_bridge, f"3-3 donor must not have D-Asp bridge: {structure}"
 
     def test_all_dimers_tagged_as_dimer(self, results):
         dimers, _ = results

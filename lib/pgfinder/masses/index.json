@@ -26,5 +26,23 @@
       "file": "c_diff_monomers_complex.csv",
       "description": "Contains di- tetra- and hexasaccharides, g(-Ac)m-A, g(-Ac)m-AE, g(-Ac)m-AEJ, g(-Ac)m-AEJX and all g(-Ac)m-AEJXX structures, where X can be any of the 20 canonical amino acids."
     }
+  },
+  "Bacillus subtilis": {
+    "Simple": {
+      "file": "bsubtilis_monomers_simple.csv",
+      "description": "DAP-type peptidoglycan. Contains di- tetra- and hexasaccharides, gm-A, gm-AE, gm-AEJ, gm-AEJX and all gm-AEJAX structures, where X can be any of the 20 canonical amino acids."
+    }
+  },
+  "Enterococcus faecalis": {
+    "Simple": {
+      "file": "efaecalis_monomers_simple.csv",
+      "description": "Lys-type peptidoglycan with di-L-Ala (Ala₂) cross-bridge. Contains gm-AQK, gm-AQKA, gm-AQKAA and variants with [A] and [AA] bridges on Lys3."
+    }
+  },
+  "Staphylococcus aureus": {
+    "Simple": {
+      "file": "saureus_monomers_simple.csv",
+      "description": "Lys-type peptidoglycan with pentaglycine (Gly₅) cross-bridge. Contains gm-AQK, gm-AQKA, gm-AQKAA and variants with [G] through [GGGGG] bridges on Lys3."
+    }
   }
 }

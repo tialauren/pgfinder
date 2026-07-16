@@ -33,7 +33,9 @@ class PeptideInfo:
     glycine_bridge_length : int
         Number of glycines in bridge (0 if no bridge)
     has_dasp_bridge : bool
-        Has D-aspartate bridge
+        Has D-aspartate bridge (single [D] residue)
+    has_ala2_bridge : bool
+        Has di-L-Ala bridge ([AA]) — E. faecalis crosslink mechanism
     original_structure : str
         Original structure string from CSV
     """
@@ -44,6 +46,7 @@ class PeptideInfo:
     has_lys_pos3: bool
     glycine_bridge_length: int
     has_dasp_bridge: bool
+    has_ala2_bridge: bool
     original_structure: str
 
 
@@ -159,12 +162,15 @@ def parse_peptide_structure(structure: str) -> Optional[PeptideInfo]:
     # Analyze bridge
     glycine_bridge_length = 0
     has_dasp_bridge = False
+    has_ala2_bridge = False
 
     if bridge_sequence:
         if all(aa == "G" for aa in bridge_sequence):
             glycine_bridge_length = len(bridge_sequence)
         elif bridge_sequence == "D":
             has_dasp_bridge = True
+        elif bridge_sequence == "AA":
+            has_ala2_bridge = True
 
     return PeptideInfo(
         sequence=sequence,
@@ -173,6 +179,7 @@ def parse_peptide_structure(structure: str) -> Optional[PeptideInfo]:
         has_lys_pos3=has_lys_pos3,
         glycine_bridge_length=glycine_bridge_length,
         has_dasp_bridge=has_dasp_bridge,
+        has_ala2_bridge=has_ala2_bridge,
         original_structure=structure,
     )
 
@@ -357,19 +364,19 @@ class AccurateSpeciesRules:
             if crosslink_type == "4-3-bridge":
                 return info.length == 5 and info.has_lys_pos3 and info.sequence[3] == "A" and info.sequence[4] == "A"
 
-        # E. faecalis (D-Asp bridge)
+        # E. faecalis (di-L-Ala bridge)
         elif species_code == "efaecalis":
             if crosslink_type == "4-3-bridge":
+                # Donor has Ala2 bridge, pentapeptide, loses D-Ala5
                 return (
                     info.length == 5
                     and info.has_lys_pos3
                     and info.sequence[3] == "A"
                     and info.sequence[4] == "A"
-                    and not info.has_dasp_bridge
+                    and info.has_ala2_bridge
                 )
             elif crosslink_type == "3-3":
-                # L,D-transpeptidase cleaves the Lys3–D-Ala4 bond; position 4 must be D-Ala.
-                return info.length == 4 and info.has_lys_pos3 and info.sequence[3] == "A" and not info.has_dasp_bridge
+                return info.length == 4 and info.has_lys_pos3 and info.sequence[3] == "A"
 
         return False
 
@@ -427,12 +434,13 @@ class AccurateSpeciesRules:
                     # PERMISSIVE: 1-5 glycines (for novel discovery)
                     return info.has_lys_pos3 and info.length >= 3 and 1 <= info.glycine_bridge_length <= 5
 
-        # E. faecalis
+        # E. faecalis (di-L-Ala bridge)
         elif species_code == "efaecalis":
             if crosslink_type == "4-3-bridge":
-                return info.has_lys_pos3 and info.length >= 3 and info.has_dasp_bridge
+                # Acceptor has Ala2 bridge, length >= 3
+                return info.has_lys_pos3 and info.length >= 3 and info.has_ala2_bridge
             elif crosslink_type == "3-3":
-                return info.length == 4 and info.has_lys_pos3 and not info.has_dasp_bridge
+                return info.length == 4 and info.has_lys_pos3 and info.sequence[3] == "A"
 
         return False
 
