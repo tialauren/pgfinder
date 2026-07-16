@@ -150,9 +150,17 @@ class AccurateDimerBuilder:
             ]
         )
 
-        # Filter to only monomers (oligomerization state = 1)
+        # Filter to only monomers (oligomerization state = 1).
+        # Accept both "gm-AEJAA|1" (standard pgfinder format) and "gm-AEJAA"
+        # (no suffix — some third-party mass databases omit the |N notation).
+        # Explicitly exclude |2 dimers in either case.
+        def _is_monomer(s):
+            if not isinstance(s, str):
+                return False
+            return s.endswith("|1") or ("|" not in s and len(s) > 0)
+
         monomers_only = matched_monomers_df[
-            matched_monomers_df[columns["inferred"]["structure"]].str.endswith("|1")
+            matched_monomers_df[columns["inferred"]["structure"]].apply(_is_monomer)
         ].copy()
 
         if monomers_only.empty:
