@@ -329,7 +329,7 @@ class AccurateDimerBuilder:
                     elif (
                         self.custom_rule is None and crosslink_type == "4-3-bridge" and self.species_code == "efaecalis"
                     ):
-                        LOGGER.debug(f"    Has D-Asp bridge: {info.has_dasp_bridge}")
+                        LOGGER.debug(f"    Has Ala2 bridge: {info.has_ala2_bridge}")
 
         if not acceptors:
             return pd.DataFrame()

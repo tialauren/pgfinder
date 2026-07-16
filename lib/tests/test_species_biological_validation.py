@@ -252,6 +252,9 @@ class TestEFaecalis:
             assert info.length == 4, f"3-3 donor must be tetrapeptide: {structure}"
             assert info.has_lys_pos3, f"3-3 donor must have Lys at pos3: {structure}"
             assert info.sequence[3] == "A", f"3-3 donor must have D-Ala at pos4: {structure}"
+            assert not info.has_ala2_bridge, (
+                f"3-3 donor must not have [AA] bridge — Lys3 epsilon-NH2 already occupied: {structure}"
+            )
 
     def test_all_dimers_tagged_as_dimer(self, results):
         dimers, _ = results

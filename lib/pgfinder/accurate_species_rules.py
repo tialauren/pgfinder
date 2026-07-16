@@ -376,7 +376,14 @@ class AccurateSpeciesRules:
                     and info.has_ala2_bridge
                 )
             elif crosslink_type == "3-3":
-                return info.length == 4 and info.has_lys_pos3 and info.sequence[3] == "A"
+                # [AA]-bridged Lys3 cannot form 3-3 crosslinks — the epsilon-NH2
+                # is already occupied by the bridge.
+                return (
+                    info.length == 4
+                    and info.has_lys_pos3
+                    and info.sequence[3] == "A"
+                    and not info.has_ala2_bridge
+                )
 
         return False
 
@@ -440,7 +447,14 @@ class AccurateSpeciesRules:
                 # Acceptor has Ala2 bridge, length >= 3
                 return info.has_lys_pos3 and info.length >= 3 and info.has_ala2_bridge
             elif crosslink_type == "3-3":
-                return info.length == 4 and info.has_lys_pos3 and info.sequence[3] == "A"
+                # [AA]-bridged Lys3 cannot accept 3-3 crosslinks — the epsilon-NH2
+                # is already occupied by the bridge.
+                return (
+                    info.length == 4
+                    and info.has_lys_pos3
+                    and info.sequence[3] == "A"
+                    and not info.has_ala2_bridge
+                )
 
         return False
 
