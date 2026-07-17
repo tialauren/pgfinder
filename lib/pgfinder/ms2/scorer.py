@@ -102,40 +102,44 @@ def score_spectrum(
     theo_sorted = theo.sort_values("mz").reset_index(drop=True)
     exp_sorted = exp.sort_values("mz").reset_index(drop=True)
 
-    # --- Greedy nearest-neighbour matching (O(n log n) via pointer walk) ---
+    # --- Greedy nearest-neighbour matching, theoretical → experimental ---
+    # We iterate over THEORETICAL peaks and find the best experimental match
+    # for each. This prevents a noise peak at e.g. 204.067 from consuming the
+    # theoretical B1 at 204.087 before the real high-intensity peak at 204.086
+    # gets a chance to claim it.
     theo_mz = theo_sorted["mz"].to_numpy()
     exp_mz = exp_sorted["mz"].to_numpy()
 
-    matched_exp_idx = set()  # which experimental peaks are already matched
-    matched_theo_idx = set()  # which theoretical peaks are already matched
+    matched_exp_idx = set()
+    matched_theo_idx = set()
 
     matches = []  # (exp_idx, theo_idx, delta_ppm)
 
-    t = 0  # pointer into theo_mz
-    for e_idx, e_mz in enumerate(exp_mz):
-        tol = _ppm_window(e_mz, ppm_tolerance, min_da_tolerance)
+    e = 0  # pointer into exp_mz
+    for t_idx, t_mz in enumerate(theo_mz):
+        tol = _ppm_window(t_mz, ppm_tolerance, min_da_tolerance)
 
-        # Advance theo pointer to the first peak within range
-        while t < len(theo_mz) and theo_mz[t] < e_mz - tol:
-            t += 1
+        # Advance exp pointer to first peak in range
+        while e < len(exp_mz) and exp_mz[e] < t_mz - tol:
+            e += 1
 
-        # Find the closest unmatched theo peak within tolerance
+        # Find the closest unmatched experimental peak within tolerance
         best_dist = float("inf")
-        best_t = -1
-        j = t
-        while j < len(theo_mz) and theo_mz[j] <= e_mz + tol:
-            if j not in matched_theo_idx:
-                dist = abs(theo_mz[j] - e_mz)
+        best_e = -1
+        j = e
+        while j < len(exp_mz) and exp_mz[j] <= t_mz + tol:
+            if j not in matched_exp_idx:
+                dist = abs(exp_mz[j] - t_mz)
                 if dist < best_dist:
                     best_dist = dist
-                    best_t = j
+                    best_e = j
             j += 1
 
-        if best_t >= 0:
-            matched_exp_idx.add(e_idx)
-            matched_theo_idx.add(best_t)
-            delta_ppm = (exp_mz[e_idx] - theo_mz[best_t]) / theo_mz[best_t] * 1e6
-            matches.append((e_idx, best_t, delta_ppm))
+        if best_e >= 0:
+            matched_exp_idx.add(best_e)
+            matched_theo_idx.add(t_idx)
+            delta_ppm = (exp_mz[best_e] - t_mz) / t_mz * 1e6
+            matches.append((best_e, t_idx, delta_ppm))
 
     # --- Score ---
     # sqrt-weighted cosine: Σ(√I_exp × √I_theo) / (√Σ(I_exp) × √N_theo_total)
