@@ -112,14 +112,14 @@ def score_mzml_against_library(
                 structure = row[structure_col]
                 ppm_err = row["_ppm_error"]
 
-                score = score_spectrum(
-                    peaks,
-                    structure,
-                    fragment_tolerance_da=fragment_tolerance_da,
+                result = score_spectrum(
+                    structure=structure,
+                    experimental_peaks=peaks,
+                    min_da_tolerance=fragment_tolerance_da,
                     charge_max=charge_max,
                     reduced=reduced,
                 )
-                if score is None or score < min_score:
+                if result is None or result["score"] < min_score:
                     continue
 
                 rows.append(
@@ -129,14 +129,17 @@ def score_mzml_against_library(
                         "precursor_mz": mz,
                         "precursor_charge": z,
                         "structure": structure,
-                        "score": score,
+                        "score": result["score"],
+                        "matched_peaks": result["matched_peaks"],
+                        "total_theo": result["total_theo"],
+                        "coverage": result["coverage"],
                         "ppm_error": round(ppm_err, 3),
                     }
                 )
 
     if not rows:
         return pd.DataFrame(
-            columns=["scan_id", "rt", "precursor_mz", "precursor_charge", "structure", "score", "ppm_error"]
+            columns=["scan_id", "rt", "precursor_mz", "precursor_charge", "structure", "score", "matched_peaks", "total_theo", "coverage", "ppm_error"]
         )
 
     return pd.DataFrame(rows).sort_values("score", ascending=False).reset_index(drop=True)
